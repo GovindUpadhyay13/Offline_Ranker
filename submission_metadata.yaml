@@ -1,0 +1,80 @@
+# Redrob Hackathon — Submission Metadata
+
+team_name: "your-team-name-here"
+
+primary_contact:
+  name: "Parv Bansal"
+  email: "parvbansal05@gmail.com"
+  phone: "+91-XXXXXXXXXX"
+
+team_members:
+  - name: "Parv Bansal"
+    email: "parvbansal05@gmail.com"
+    role: "Team Lead"
+
+# ============================================================================
+# Code and reproducibility
+# ============================================================================
+github_repo: "https://github.com/YOUR_USERNAME/YOUR_REPO"
+sandbox_link: "https://huggingface.co/spaces/YOUR_USERNAME/redrob-ranker"
+
+reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./submission.csv"
+# precompute.py must be run once first (network allowed) to vendor the models and
+# build the indexes. After that, the command above runs offline under 5 minutes.
+
+# ============================================================================
+# Compute environment
+# ============================================================================
+compute:
+  platform: "MacBook Pro (Apple Silicon)"
+  cpu_cores: 8
+  ram_gb: 16
+  python_version: "3.12.13"
+  os: "macOS 15 (Darwin 25.5.0)"
+  uses_gpu_for_inference: false
+  has_network_during_ranking: false
+  pre_computation_required: true
+  pre_computation_time_minutes: 6   # approximate: ~3.5 min embedding 100k on CPU plus a cold model download
+
+# ============================================================================
+# AI tools declaration
+# ============================================================================
+ai_tools_used:
+  - "Claude"
+
+ai_usage_summary: |
+  Used Claude (Claude Code) for architecture discussion, scaffolding, and code
+  review while building the ranker. All model inference in the pipeline is local:
+  a vendored sentence-transformers embedder and a cross-encoder reranker run on
+  CPU from the models/ directory. No candidate data was sent to any model API or
+  external service, during precompute or ranking. Ranking runs with networking
+  disabled (see python rank.py --prove-offline).
+
+# ============================================================================
+# Approach summary
+# ============================================================================
+methodology_summary: |
+  Two binaries. precompute.py (network allowed, run once) vendors a small CPU
+  embedding model and a cross-encoder into models/, embeds each candidate's
+  evidence text (career-history descriptions plus summary, not the skills list),
+  and builds a FAISS dense index and a BM25 lexical index, persisting vectors,
+  both indexes, and the candidate_id order.
+
+  rank.py (no network, under 5 minutes) embeds the JD once, retrieves with BM25
+  and dense FAISS, fuses the two with Reciprocal Rank Fusion (k=60) into a
+  shortlist, then reranks the survivors with the local cross-encoder as the
+  primary relevance signal. Behavioral availability and location fit, computed
+  from real pool percentiles with -1 sentinels treated as missing, apply small
+  multiplicative modifiers. Results sort by score descending with candidate_id
+  ascending as the tie-break. Each row carries a one-line justification built
+  from structured facts plus a counterfactual clause, no LLM.
+
+# ============================================================================
+# Declarations
+# ============================================================================
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: true
+  reproduction_tested: true

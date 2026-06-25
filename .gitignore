@@ -1,0 +1,14 @@
+candidates.jsonl
+*.jsonl.gz
+models/
+.venv/
+__pycache__/
+*.pyc
+*.faiss
+*.index
+*.npy
+*.pkl
+*.parquet
+.DS_Store
+__MACOSX/
+[PUB] India_runs_data_and_ai_challenge/
