@@ -29,6 +29,13 @@ CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"  # light reranker, 
 EMBED_DIM = 384  # all-MiniLM-L6-v2 output width, fixes the FAISS index dimension
 EMBED_BATCH = 256  # encode batch size that fits 100k texts in 16 GB RAM
 
+# Reasoning path (the one-line justification per ranked candidate)
+REASONING_MODE = "template"  # "template" (default, deterministic) or "llm" (local flan-t5, offline)
+FLAN_MODEL = "google/flan-t5-small"  # tiny seq2seq vendored in precompute, writes the line in llm mode
+FLAN_DIR = "models/flan"  # local copy loaded by rank with no network, top 100 only
+LLM_MAX_NEW_TOKENS = 48  # one sentence is enough, caps per-candidate generation time
+RUNTIME_WARN_S = 240  # warn if total rank.py runtime exceeds about 4 minutes
+
 # Retrieval and fusion
 BM25_TOPK = 1500  # lexical candidates pulled before fusion
 DENSE_TOPK = 1500  # dense candidates pulled before fusion

@@ -14,6 +14,7 @@ import time
 
 import numpy as np
 from sentence_transformers import CrossEncoder, SentenceTransformer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 import config
 from src import features, io, retrieval
@@ -35,6 +36,8 @@ def main():
     embedder = SentenceTransformer(config.EMBED_MODEL)
     embedder.save(config.EMBED_DIR)
     CrossEncoder(config.CROSS_ENCODER_MODEL).save(config.CROSS_DIR)
+    AutoTokenizer.from_pretrained(config.FLAN_MODEL).save_pretrained(config.FLAN_DIR)
+    AutoModelForSeq2SeqLM.from_pretrained(config.FLAN_MODEL).save_pretrained(config.FLAN_DIR)
     print(f"models: vendored to {config.MODELS_DIR}, {time.perf_counter() - t:.1f}s")
 
     t = time.perf_counter()

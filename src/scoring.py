@@ -104,15 +104,16 @@ def recency_modifier(cand) -> float:
     return ic * recency
 
 
-def applied_ml_signal(cand) -> float:
-    """Applied-ML experience in [0, 1], saturating at the JD's target years.
+def applied_ml_months(cand) -> int:
+    """Months in roles whose title or description shows ML/AI/NLP/search/ranking/
+    recommendation/retrieval work, distinct from total experience."""
+    return sum(r.duration_months for r in cand.career_history
+               if _ML_RE.search(f"{r.title} {r.description}".lower()))
 
-    Counts months in roles whose title or description shows ML/AI/NLP/search/
-    ranking/recommendation/retrieval work, distinct from total experience.
-    """
-    months = sum(r.duration_months for r in cand.career_history
-                 if _ML_RE.search(f"{r.title} {r.description}".lower()))
-    return min(months / 12.0 / config.APPLIED_ML_TARGET_YEARS, 1.0)
+
+def applied_ml_signal(cand) -> float:
+    """Applied-ML experience in [0, 1], saturating at the JD's target years."""
+    return min(applied_ml_months(cand) / 12.0 / config.APPLIED_ML_TARGET_YEARS, 1.0)
 
 
 def is_title_chaser(cand) -> bool:

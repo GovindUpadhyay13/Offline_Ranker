@@ -143,11 +143,23 @@ def main():
 
     top = scoring.order_top(scored, config.TOP_N)
     print_top(top, mods, fac, imp)
-    write_csv(args.out, top, mods)
+
+    t = time.perf_counter()
+    reasons, fell_back = reasoning.generate(config.REASONING_MODE, top, mods)
+    if config.REASONING_MODE == "llm":
+        print(f"reasoning: llm path, {fell_back} of {len(top)} fell back to template, "
+              f"{time.perf_counter() - t:.1f}s")
+    else:
+        print(f"reasoning: template path, {time.perf_counter() - t:.1f}s")
+
+    write_csv(args.out, top, reasons)
     print(f"write: {len(top)} rows to {args.out}")
 
     ok = validate(args.out)
-    print(f"{'PASS' if ok else 'FAIL'}: total {time.perf_counter() - start:.1f}s")
+    total = time.perf_counter() - start
+    print(f"{'PASS' if ok else 'FAIL'}: total {total:.1f}s")
+    if total > config.RUNTIME_WARN_S:
+        print(f"WARN: total runtime {total:.1f}s exceeds the {config.RUNTIME_WARN_S}s budget")
     sys.exit(0 if ok else 1)
 
 
@@ -197,21 +209,20 @@ def report_disqualifiers(flagged, raw, mods):
 
 
 def print_top(top, mods, fac, imp):
-    print("top 15 (per-facet relevance: shipped, embeddings, product-ml):")
-    for rank, (cid, score) in enumerate(top[:15], 1):
+    print("top 20 (per-facet relevance: shipped, embeddings, product-ml):")
+    for rank, (cid, score) in enumerate(top[:20], 1):
         cand = mods[cid][0]
         fs = " ".join(f"{x:.2f}" for x in fac[cid])
         title = f"{cand.profile.current_title} at {cand.profile.current_company}"
         print(f"  {rank:2d} {cid} score={score:.4f} impact={imp[cid]:.2f} facets=[{fs}] {title}")
 
 
-def write_csv(path, top, mods):
+def write_csv(path, top, reasons):
     with open(path, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["candidate_id", "rank", "score", "reasoning"])
         for rank, (cid, score) in enumerate(top, 1):
-            cand, avail, loc = mods[cid]
-            w.writerow([cid, rank, repr(score), reasoning.justify(cand, avail, loc)])
+            w.writerow([cid, rank, repr(score), reasons[cid]])
 
 
 def validate(path):

@@ -8,13 +8,17 @@ ranking rather than restate it. Each component is in [0, 1], higher is better,
 and the composite is their unweighted mean. Read it as a directional cohort
 quality measure, not an absolute ground truth (the dataset ships no labels).
 
-  python3 eval_harness.py submission.csv [--candidates candidates.jsonl]
+  python3 eval/eval_harness.py submission.csv [--candidates candidates.jsonl]
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root, for config/src
 
 import config
 from src import disqualifiers, impact, io, scoring
