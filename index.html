@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Candidate Ranking - RedRob</title>
+<style>
+  :root {
+    --accent: #2563eb;
+    --accent-light: #eff6ff;
+    --bg: #f8fafc;
+    --panel: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --text-faint: #94a3b8;
+    --good: #16a34a;
+    --good-bg: #f0fdf4;
+    --warn: #d97706;
+    --warn-bg: #fffbeb;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  header { margin-bottom: 28px; }
+  .eyebrow {
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--accent);
+    letter-spacing: 1.5px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  h1 { font-size: 26px; font-weight: 700; margin: 0 0 4px; }
+  .sub { color: var(--text-muted); font-size: 14.5px; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 96px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14.5px;
+    resize: vertical;
+    color: var(--text);
+    background: #fff;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+
+  .row { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; gap: 12px; flex-wrap: wrap; }
+  .hint { font-size: 12.5px; color: var(--text-faint); }
+
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  button:hover:not(:disabled) { opacity: 0.92; }
+  button:active:not(:disabled) { transform: scale(0.98); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .error-msg {
+    margin-top: 10px;
+    font-size: 13.5px;
+    color: #b91c1c;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    padding: 8px 12px;
+    border-radius: 6px;
+    display: none;
+  }
+  .error-msg.show { display: block; }
+
+  .loading-row {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    color: var(--text-muted);
+    font-family: ui-monospace, monospace;
+    margin-top: 12px;
+  }
+  .loading-row.show { display: flex; }
+  .dots::after { content: ''; animation: dots 1.2s steps(4, end) infinite; }
+  @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } 100% { content: ''; } }
+
+  /* summary stat bar */
+  .stats {
+    display: none;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .stats.show { display: grid; }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .stat .num { font-size: 24px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .stat .lbl { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .stat.highlight { background: var(--good-bg); border-color: #bbf7d0; }
+  .stat.highlight .num { color: var(--good); }
+
+  /* results */
+  #resultsWrap { display: none; }
+  #resultsWrap.show { display: block; }
+
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
+  .results-summary { font-size: 13px; color: var(--text-muted); font-family: ui-monospace, monospace; }
+  input.filter {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13.5px;
+    width: 220px;
+    background: #fff;
+  }
+  input.filter:focus { outline: none; border-color: var(--accent); }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .card:hover { border-color: #cbd5e1; }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    cursor: pointer;
+  }
+  .rank-badge {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    background: var(--accent-light);
+    color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13.5px;
+    font-family: ui-monospace, monospace;
+    flex-shrink: 0;
+  }
+  .card-id { font-family: ui-monospace, monospace; font-size: 13.5px; color: var(--text); font-weight: 600; flex-shrink: 0; width: 120px; }
+  .card-reasoning { flex: 1; font-size: 13.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-score { font-family: ui-monospace, monospace; font-size: 13.5px; font-weight: 700; color: var(--text); flex-shrink: 0; }
+  .integrity-badge {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+    flex-shrink: 0;
+    letter-spacing: 0.3px;
+  }
+  .integrity-badge.clean { background: var(--good-bg); color: var(--good); }
+  .integrity-badge.flag { background: var(--warn-bg); color: var(--warn); }
+  .chevron { color: var(--text-faint); flex-shrink: 0; transition: transform 0.15s; font-size: 11px; }
+  .card.open .chevron { transform: rotate(90deg); }
+
+  .card-body { display: none; padding: 0 18px 18px; border-top: 1px solid var(--border); }
+  .card.open .card-body { display: block; }
+
+  .body-section { margin-top: 16px; }
+  .body-label { font-size: 11px; font-weight: 700; color: var(--text-faint); letter-spacing: 0.6px; margin-bottom: 8px; }
+  .reasoning-full { font-size: 14px; color: var(--text); line-height: 1.6; }
+
+  .facet { margin-bottom: 10px; }
+  .facet-top { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 4px; }
+  .facet-text { color: var(--text-muted); padding-right: 12px; }
+  .facet-score { font-family: ui-monospace, monospace; font-weight: 700; color: var(--text); flex-shrink: 0; }
+  .bar-track { height: 6px; background: #f1f5f9; border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+
+  .modifiers-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .mod { background: #f8fafc; border-radius: 8px; padding: 10px 12px; }
+  .mod .mod-lbl { font-size: 11px; color: var(--text-faint); }
+  .mod .mod-val { font-family: ui-monospace, monospace; font-weight: 700; font-size: 14px; margin-top: 2px; }
+
+  footer { text-align: center; margin-top: 40px; font-size: 11.5px; color: var(--text-faint); font-family: ui-monospace, monospace; }
+
+  /* ── Candidate profile section ── */
+  .profile-header { margin-bottom: 0; }
+  .profile-role { font-size: 15px; font-weight: 700; color: var(--text); }
+  .profile-yoe { font-size: 12.5px; color: var(--text-muted); margin-top: 3px; }
+  .career-timeline { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .tl-row { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 8px; font-size: 12.5px; }
+  .tl-marker { width: 7px; height: 7px; border-radius: 50%; background: var(--bg); border: 2px solid var(--accent); }
+  .tl-current .tl-marker { border-color: var(--good); background: var(--good-bg); }
+  .tl-content { display: flex; gap: 5px; align-items: baseline; min-width: 0; overflow: hidden; }
+  .tl-title { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-sep { color: var(--text-faint); flex-shrink: 0; }
+  .tl-company { color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-dur { font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--text-faint); flex-shrink: 0; padding-left: 8px; }
+
+  /* ── Why This Score breakdown ── */
+  .score-bd { display: flex; flex-direction: column; gap: 8px; }
+  .sb-row { display: flex; align-items: baseline; gap: 10px; }
+  .sb-lbl { font-size: 13px; color: var(--text-muted); flex: 0 0 175px; }
+  .sb-num { font-family: ui-monospace, monospace; font-weight: 700; font-size: 13px; color: var(--text); flex: 0 0 52px; }
+  .sb-clause { font-size: 12px; color: var(--text-faint); }
+  .sb-divider { border: none; border-top: 1px dashed var(--border); margin: 2px 0; }
+  .sb-final { background: var(--accent-light); border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+  .sb-final .sb-lbl { color: var(--accent); font-weight: 700; }
+  .sb-final .sb-num { font-size: 16px; color: var(--accent); }
+  .sb-final .sb-clause { color: #1d4ed8; font-size: 12px; }
+  .sb-disq { font-size: 12.5px; color: var(--warn); background: var(--warn-bg); border: 1px solid #fde68a; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">RECRUITER DASHBOARD</div>
+    <h1>Candidate Ranking</h1>
+    <div class="sub">Paste a job description. The system ranks 100,000 candidates against it live.</div>
+  </header>
+
+  <div class="panel">
+    <textarea id="jdInput" placeholder="Paste a job description here..."></textarea>
+    <div class="row">
+      <div class="hint">Ctrl + Enter to rank</div>
+      <button id="rankBtn">Rank Candidates</button>
+    </div>
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="loading-row" id="loadingRow">
+      <span class="dots">Ranking candidates, this takes about 20 seconds</span>
+    </div>
+  </div>
+
+  <div class="stats" id="statsBar">
+    <div class="stat highlight">
+      <div class="num" id="statExcluded">N/A</div>
+      <div class="lbl">fabricated profiles caught</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="statPool">N/A</div>
+      <div class="lbl">candidates analyzed</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="statRange">N/A</div>
+      <div class="lbl">relevance score range</div>
+    </div>
+    <div class="stat">
+      <div class="num" id="statBreakdown">N/A</div>
+      <div class="lbl">hard / soft exclusions</div>
+    </div>
+  </div>
+
+  <div id="resultsWrap">
+    <div class="toolbar">
+      <div class="results-summary" id="resultsSummary"></div>
+      <input class="filter" id="filterInput" placeholder="Filter by ID or reasoning...">
+    </div>
+    <div id="cardsContainer"></div>
+  </div>
+
+  <footer>INTELLIGENT CANDIDATE RANKING · REDROB TRACK 01</footer>
+</div>
+
+<script>
+// ── Configuration ──
+const API_BASE = "http://localhost:8000";
+
+let allCandidates = [];
+
+const jdInput = document.getElementById('jdInput');
+const rankBtn = document.getElementById('rankBtn');
+const errorMsg = document.getElementById('errorMsg');
+const loadingRow = document.getElementById('loadingRow');
+const statsBar = document.getElementById('statsBar');
+const resultsWrap = document.getElementById('resultsWrap');
+const cardsContainer = document.getElementById('cardsContainer');
+const resultsSummary = document.getElementById('resultsSummary');
+const filterInput = document.getElementById('filterInput');
+
+function showError(msg) {
+  errorMsg.textContent = msg;
+  errorMsg.classList.add('show');
+}
+function hideError() {
+  errorMsg.classList.remove('show');
+}
+function setLoading(isLoading) {
+  loadingRow.classList.toggle('show', isLoading);
+  rankBtn.disabled = isLoading;
+}
+
+async function rankCandidates() {
+  hideError();
+  const jd = jdInput.value.trim();
+  if (!jd) {
+    showError('Paste a job description before ranking.');
+    return;
+  }
+
+  setLoading(true);
+  statsBar.classList.remove('show');
+  resultsWrap.classList.remove('show');
+
+  try {
+    const res = await fetch(`${API_BASE}/rank`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_description: jd })
+    });
+
+    if (res.status === 503) {
+      showError('Server starting up, please wait and try again.');
+      setLoading(false);
+      return;
+    }
+    if (!res.ok) {
+      showError(`Error: HTTP ${res.status}`);
+      setLoading(false);
+      return;
+    }
+
+    const data = await res.json();
+    renderSummary(data.summary);
+    allCandidates = data.candidates || [];
+    renderCards(allCandidates);
+
+  } catch (e) {
+    showError('Server starting up, please wait and try again.');
+  } finally {
+    setLoading(false);
+  }
+}
+
+function renderSummary(summary) {
+  if (!summary) { statsBar.classList.remove('show'); return; }
+  document.getElementById('statExcluded').textContent = summary.total_excluded_by_integrity ?? 'N/A';
+  document.getElementById('statPool').textContent = (summary.total_pool_size ?? 0).toLocaleString();
+  const min = summary.score_range?.min, max = summary.score_range?.max;
+  document.getElementById('statRange').textContent = (min != null && max != null) ? `${min.toFixed(2)} to ${max.toFixed(2)}` : 'N/A';
+  document.getElementById('statBreakdown').textContent = `${summary.excluded_hard ?? 0} / ${summary.excluded_soft ?? 0}`;
+  statsBar.classList.add('show');
+}
+
+function renderCards(list) {
+  cardsContainer.innerHTML = '';
+  resultsSummary.textContent = `${list.length} candidates ranked`;
+  resultsWrap.classList.add('show');
+
+  list.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const isClean = (c.integrity_status || 'clean') === 'clean';
+    const badgeClass = isClean ? 'clean' : 'flag';
+    const badgeText = isClean ? 'VERIFIED' : (c.integrity_status || 'FLAGGED').toUpperCase();
+
+    const head = document.createElement('div');
+    head.className = 'card-head';
+    head.innerHTML = `
+      <div class="rank-badge">${c.rank}</div>
+      <div class="card-id">${c.candidate_id}</div>
+      <div class="card-reasoning">${escapeHtml(c.reasoning || '')}</div>
+      <span class="integrity-badge ${badgeClass}">${badgeText}</span>
+      <div class="card-score">${(c.score ?? 0).toFixed(3)}</div>
+      <div class="chevron">▶</div>
+    `;
+    head.addEventListener('click', () => card.classList.toggle('open'));
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    let facetsHtml = '';
+    if (Array.isArray(c.facet_scores) && c.facet_scores.length) {
+      facetsHtml = `<div class="body-section"><div class="body-label">RELEVANCE BREAKDOWN</div>` +
+        c.facet_scores.map(f => {
+          const pct = Math.max(0, Math.min(100, (f.score || 0) * 100));
+          return `<div class="facet">
+            <div class="facet-top"><span class="facet-text">${escapeHtml(f.facet)}</span><span class="facet-score">${(f.score ?? 0).toFixed(2)}</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          </div>`;
+        }).join('') + `</div>`;
+    }
+
+    const hasModifiers = c.availability_modifier != null || c.location_modifier != null || c.recency_modifier != null;
+    const modifiersHtml = hasModifiers ? `
+      <div class="body-section">
+        <div class="body-label">MODIFIERS</div>
+        <div class="modifiers-grid">
+          <div class="mod"><div class="mod-lbl">Availability</div><div class="mod-val">${fmt(c.availability_modifier)}</div></div>
+          <div class="mod"><div class="mod-lbl">Location</div><div class="mod-val">${fmt(c.location_modifier)}</div></div>
+          <div class="mod"><div class="mod-lbl">Recency</div><div class="mod-val">${fmt(c.recency_modifier)}</div></div>
+        </div>
+      </div>` : '';
+
+    body.innerHTML = `
+      ${profileHtml(c.profile)}
+      <div class="body-section">
+        <div class="body-label">FULL REASONING</div>
+        <div class="reasoning-full">${escapeHtml(c.reasoning || '')}</div>
+      </div>
+      ${scoreBreakdownHtml(c)}
+      ${facetsHtml}
+      ${modifiersHtml}
+    `;
+
+    card.appendChild(head);
+    card.appendChild(body);
+    cardsContainer.appendChild(card);
+  });
+}
+
+function fmt(v) { return v == null ? 'N/A' : Number(v).toFixed(3); }
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ── Profile & score-breakdown helpers ──
+
+// Facet weights mirror config.FACET_WEIGHTS = [1.0, 1.0, 0.8], RELEVANCE_TOP_FACETS=3
+const FACET_WEIGHTS = [1.0, 1.0, 0.8];
+
+function computeBaseRelevance(facets) {
+  if (!Array.isArray(facets) || !facets.length) return null;
+  let wsum = 0, wdenom = 0;
+  facets.forEach((f, i) => {
+    const w = FACET_WEIGHTS[i] ?? 1.0;
+    wsum  += w * (f.score || 0);
+    wdenom += w;
+  });
+  return wdenom > 0 ? wsum / wdenom : null;
+}
+
+function modifierClause(name, val) {
+  if (name === 'availability') {
+    if (val >= 0.6)  return 'Boost: recently active with strong recruiter engagement';
+    if (val >= 0.1)  return 'Slight boost: moderate activity and response signals';
+    if (val > -0.1)  return 'Neutral: no strong availability signal either way';
+    if (val > -0.6)  return 'Slight reduction: limited recent activity or response rate';
+    return 'Reduced: inactive or unresponsive to recruiters';
+  }
+  if (name === 'location') {
+    if (val >= 0.99) return 'No penalty: candidate is in a target metro';
+    if (val >= 0.4)  return 'Slight reduction: in India, open to relocating to target cities';
+    if (val >= -0.1) return 'Reduction: in India but outside target cities, not relocating';
+    return 'Penalty: candidate located outside India';
+  }
+  if (name === 'recency') {
+    if (val > 0.1)   return 'Boost: currently active as a hands-on individual contributor';
+    if (val >= -0.1) return 'Neutral: role type or timing is neither a boost nor a penalty';
+    return 'Reduction: currently in a management or architecture role';
+  }
+  return '';
+}
+
+function profileHtml(profile) {
+  if (!profile) return '';
+  const parts = [profile.current_title, profile.current_company].filter(Boolean);
+  const roleLine = parts.join(' at ');
+  const yoe = profile.years_of_experience != null
+    ? `${profile.years_of_experience} yrs experience` : '';
+  const history = (profile.career_history || []).map((r, i) =>
+    `<div class="tl-row${i === 0 ? ' tl-current' : ''}">
+      <div class="tl-marker"></div>
+      <div class="tl-content">
+        <span class="tl-title">${escapeHtml(r.title)}</span>
+        ${r.company ? `<span class="tl-sep">·</span><span class="tl-company">${escapeHtml(r.company)}</span>` : ''}
+      </div>
+      <span class="tl-dur">${escapeHtml(r.duration)}</span>
+    </div>`
+  ).join('');
+  return `
+    <div class="body-section">
+      <div class="body-label">CANDIDATE PROFILE</div>
+      <div class="profile-header">
+        ${roleLine ? `<div class="profile-role">${escapeHtml(roleLine)}</div>` : ''}
+        ${yoe ? `<div class="profile-yoe">${escapeHtml(yoe)}</div>` : ''}
+      </div>
+      ${history ? `<div class="career-timeline">${history}</div>` : ''}
+    </div>`;
+}
+
+function scoreBreakdownHtml(c) {
+  const base = computeBaseRelevance(c.facet_scores);
+  if (base === null) return '';
+
+  const sgn = v => (v >= 0 ? '+' : '') + v.toFixed(3);
+
+  // Raw modifier values (used for clause text generation)
+  const avail_raw   = c.availability_modifier ?? 0;
+  const loc_raw     = c.location_modifier     ?? 0;
+  const rec_raw     = c.recency_modifier      ?? 0;
+  const chaser      = !!c.title_chaser;
+  const applied_raw = c.applied_ml_score      ?? 0;
+  const impact_raw  = c.impact_score          ?? 0;
+
+  // Score contributions: each term from the combine() formula, expressed as
+  // the amount it actually adds to the final score. They sum to c.score.
+  const avail_c   = base * 0.15 * avail_raw;
+  const loc_c     = base * 0.10 * loc_raw;
+  const rec_c     = base * 0.10 * rec_raw;
+  const chaser_c  = chaser ? -(base * 0.10) : 0;
+  const applied_c = 0.05 * applied_raw;
+  const impact_c  = 0.03 * impact_raw;
+
+  function chaserClause(fired) {
+    return fired
+      ? 'Penalty: brief average tenure across ≥3 companies signals title-chasing'
+      : 'No penalty: stable career trajectory across companies';
+  }
+  function appliedClause(v) {
+    if (v >= 0.75) return 'Strong: 3+ yrs detected in applied ML, search, or NLP roles';
+    if (v >= 0.40) return 'Moderate: 1-3 yrs detected in applied ML, search, or NLP roles';
+    if (v >= 0.10) return 'Some: limited applied ML or search experience detected';
+    return 'Minimal: little applied ML or search experience found in history';
+  }
+  function impactClause(v) {
+    if (v >= 0.70) return 'Strong: quantified outcomes and ownership verbs throughout';
+    if (v >= 0.35) return 'Moderate: some quantified outcomes in role descriptions';
+    return 'Limited: descriptions lean on duties rather than measured results';
+  }
+
+  const rows = [
+    { label: 'Availability adjustment', val: avail_c,   clause: modifierClause('availability', avail_raw) },
+    { label: 'Location match',          val: loc_c,     clause: modifierClause('location', loc_raw) },
+    { label: 'Hands-on recency',        val: rec_c,     clause: modifierClause('recency', rec_raw) },
+    { label: 'Career pattern',          val: chaser_c,  clause: chaserClause(chaser) },
+    { label: 'Applied ML experience',   val: applied_c, clause: appliedClause(applied_raw) },
+    { label: 'Impact signals',          val: impact_c,  clause: impactClause(impact_raw) },
+  ];
+
+  const rowHtml = rows.map(r =>
+    `<div class="sb-row">
+      <span class="sb-lbl">${r.label}</span>
+      <span class="sb-num">${sgn(r.val)}</span>
+      <span class="sb-clause">${r.clause}</span>
+    </div>`
+  ).join('');
+
+  const isDisqualified = Array.isArray(c.disqualifier_status) && c.disqualifier_status.length > 0;
+  const disqHtml = isDisqualified
+    ? `<div class="sb-disq">Score floored - disqualifier fired: ${escapeHtml(c.disqualifier_status.join(', '))}</div>`
+    : '';
+
+  const snippet = (c.reasoning || '').slice(0, 90) + ((c.reasoning || '').length > 90 ? '…' : '');
+
+  return `
+    <div class="body-section">
+      <div class="body-label">WHY THIS SCORE</div>
+      ${disqHtml}
+      <div class="score-bd">
+        <div class="sb-row">
+          <span class="sb-lbl">Base relevance</span>
+          <span class="sb-num">${base.toFixed(3)}</span>
+          <span class="sb-clause">Weighted match across ${(c.facet_scores || []).length} role facets</span>
+        </div>
+        <hr class="sb-divider">
+        ${rowHtml}
+        <div class="sb-final">
+          <span class="sb-lbl">Final score</span>
+          <span class="sb-num">${(c.score ?? 0).toFixed(3)}</span>
+          <span class="sb-clause">${escapeHtml(snippet)}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+filterInput.addEventListener('input', () => {
+  const q = filterInput.value.trim().toLowerCase();
+  if (!q) { renderCards(allCandidates); return; }
+  const filtered = allCandidates.filter(c =>
+    c.candidate_id.toLowerCase().includes(q) ||
+    (c.reasoning || '').toLowerCase().includes(q)
+  );
+  renderCards(filtered);
+});
+
+rankBtn.addEventListener('click', rankCandidates);
+jdInput.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'Enter') rankCandidates();
+});
+</script>
+</body>
+</html>

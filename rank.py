@@ -30,6 +30,124 @@ from src import disqualifiers, features, impact, integrity, io, reasoning, reran
 faiss.omp_set_num_threads(1)  # avoid faiss/torch OpenMP clash that segfaults on macOS
 
 
+# ---------------------------------------------------------------------------
+# Core pipeline — callable from both CLI and API
+# ---------------------------------------------------------------------------
+
+def _integrity_status(cid, violations):
+    """Return "clean" or the name(s) of the soft check(s) that flagged this candidate.
+
+    Hard-violation candidates are excluded before scoring and never appear here;
+    any candidate that reaches the top 100 with a violations entry has only
+    uncorroborated soft anomalies.
+    """
+    if not violations or cid not in violations:
+        return "clean"
+    _, _, hard, soft = violations[cid]
+    checks = soft or hard
+    return checks[0] if len(checks) == 1 else ", ".join(checks)
+
+
+def rank_candidates(
+    jd_text: str,
+    *,
+    embedder,
+    cross,
+    index,
+    bm25,
+    id_order: list,
+    candidate_pool: dict,
+    excluded: set,
+    stats: dict,
+    violations: dict | None = None,
+) -> list[dict]:
+    """Embed a JD and run retrieval → rerank → score → reasoning.
+
+    candidate_pool: dict mapping candidate_id -> Candidate. Must contain at
+        least the candidates that appear in the shortlist (CLI passes only the
+        shortlisted subset; API passes the full pool loaded at startup).
+    excluded: candidate IDs dropped by the integrity gate.
+    stats: pool-percentile cut points from scoring.pool_stats().
+    violations: optional dict from integrity gate (cid -> (title, company, hard, soft));
+        when provided, each result includes an integrity_status field.
+
+    Returns the top-100 as a list of dicts with keys:
+        candidate_id, rank, score, reasoning, facet_scores,
+        availability_modifier, location_modifier, recency_modifier,
+        integrity_status.
+    """
+    jd_vec = (
+        embedder.encode(jd_text, normalize_embeddings=True, convert_to_numpy=True)
+        .astype(np.float32)
+    )
+    dense = retrieval.dense_search(index, jd_vec, config.DENSE_TOPK)
+    lexical = retrieval.bm25_search(bm25, retrieval.tokenize(jd_text), config.BM25_TOPK)
+    rows = retrieval.rrf_fuse([dense, lexical], config.RRF_K, config.SHORTLIST)
+    shortlist = [id_order[r] for r in rows]
+
+    cands = [
+        candidate_pool[cid]
+        for cid in shortlist
+        if cid in candidate_pool and cid not in excluded
+    ]
+    texts = [features.evidence_text(c) for c in cands]
+    active_facets = rerank.extract_facets(jd_text)
+    print(f"facets: {active_facets}")
+    facets = rerank.facet_scores(cross, active_facets, texts)
+
+    scored, mods, fac, raw, flagged, imp, rec = [], {}, {}, {}, {}, {}, {}
+    applied_scores: dict = {}
+    chasers: dict = {}
+    for c, row in zip(cands, facets):
+        cid = c.candidate_id
+        avail = scoring.availability_modifier(c, stats)
+        loc = scoring.location_modifier(c)
+        recency = scoring.recency_modifier(c)
+        applied = scoring.applied_ml_signal(c)
+        chaser = scoring.is_title_chaser(c)
+        imp[cid] = impact.impact_score(c)
+        applied_scores[cid] = applied
+        chasers[cid] = chaser
+        mods[cid] = (c, avail, loc)
+        rec[cid] = recency
+        fac[cid] = row
+        rel = scoring.facet_relevance(row)
+        raw[cid] = scoring.combine(rel, avail, loc, recency, applied, chaser, imp[cid])
+        fl = disqualifiers.flags(c)
+        if fl:
+            flagged[cid] = fl
+        scored.append((cid, config.DISQUALIFIER_FLOOR if fl else raw[cid]))
+
+    top = scoring.order_top(scored, config.TOP_N)
+    reasons, _ = reasoning.generate(config.REASONING_MODE, top, mods)
+
+    return [
+        {
+            "candidate_id": cid,
+            "rank": rank,
+            "score": float(score),
+            "reasoning": reasons[cid],
+            "facet_scores": [
+                {"facet": f, "score": float(fac[cid][i])}
+                for i, f in enumerate(active_facets)
+            ],
+            "availability_modifier": float(mods[cid][1]),
+            "location_modifier": float(mods[cid][2]),
+            "recency_modifier": float(rec[cid]),
+            "integrity_status": _integrity_status(cid, violations),
+            "applied_ml_score": float(applied_scores[cid]),
+            "impact_score": float(imp[cid]),
+            "title_chaser": chasers[cid],
+            "disqualifier_status": flagged.get(cid) or None,
+        }
+        for rank, (cid, score) in enumerate(top, 1)
+    ]
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point (unchanged behaviour)
+# ---------------------------------------------------------------------------
+
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--candidates", default=config.DATA_PATH)
@@ -116,44 +234,24 @@ def main():
     excluded = run_gate(feat, ids_all, violations, args.out)
 
     t = time.perf_counter()
-    cands = [pool[cid] for cid in shortlist if cid in pool and cid not in excluded]
-    texts = [features.evidence_text(c) for c in cands]
-    facets = rerank.facet_scores(cross, config.FACETS, texts)
-    print(f"rerank: {len(cands)} scored on {len(config.FACETS)} facets, {time.perf_counter() - t:.1f}s")
+    results = rank_candidates(
+        jd_text,
+        embedder=embedder,
+        cross=cross,
+        index=index,
+        bm25=bm25,
+        id_order=id_order,
+        candidate_pool=pool,
+        excluded=excluded,
+        stats=stats,
+    )
+    print(f"rank: {len(results)} candidates scored, {time.perf_counter() - t:.1f}s")
 
-    scored, mods, fac, raw, flagged, imp = [], {}, {}, {}, {}, {}
-    for c, row in zip(cands, facets):
-        cid = c.candidate_id
-        avail = scoring.availability_modifier(c, stats)
-        loc = scoring.location_modifier(c)
-        recency = scoring.recency_modifier(c)
-        applied = scoring.applied_ml_signal(c)
-        chaser = scoring.is_title_chaser(c)
-        imp[cid] = impact.impact_score(c)
-        mods[cid] = (c, avail, loc)
-        fac[cid] = row
-        rel = scoring.facet_relevance(row)
-        raw[cid] = scoring.combine(rel, avail, loc, recency, applied, chaser, imp[cid])
-        fl = disqualifiers.flags(c)
-        if fl:
-            flagged[cid] = fl
-        scored.append((cid, config.DISQUALIFIER_FLOOR if fl else raw[cid]))
+    # Print top-20 diagnostic (replicates old print_top + report_disqualifiers)
+    _report_cli(results, pool, excluded)
 
-    report_disqualifiers(flagged, raw, mods)
-
-    top = scoring.order_top(scored, config.TOP_N)
-    print_top(top, mods, fac, imp)
-
-    t = time.perf_counter()
-    reasons, fell_back = reasoning.generate(config.REASONING_MODE, top, mods)
-    if config.REASONING_MODE == "llm":
-        print(f"reasoning: llm path, {fell_back} of {len(top)} fell back to template, "
-              f"{time.perf_counter() - t:.1f}s")
-    else:
-        print(f"reasoning: template path, {time.perf_counter() - t:.1f}s")
-
-    write_csv(args.out, top, reasons)
-    print(f"write: {len(top)} rows to {args.out}")
+    write_csv(args.out, results)
+    print(f"write: {len(results)} rows to {args.out}")
 
     ok = validate(args.out)
     total = time.perf_counter() - start
@@ -189,40 +287,20 @@ def run_gate(feat, ids_all, violations, out_path):
     return set(excluded)
 
 
-def report_disqualifiers(flagged, raw, mods):
-    """Per-flag counts, plus any pre-floor top-100 candidate the floor removes."""
-    counts = {f: sum(1 for fl in flagged.values() if f in fl) for f in disqualifiers.FLAGS}
-    summary = ", ".join(f"{f}={counts[f]}" for f in disqualifiers.FLAGS)
-    print(f"disqualifiers: {summary} ({len(flagged)} candidates floored of {len(raw)} scored)")
-
-    prefloor = {cid for cid, _ in scoring.order_top(list(raw.items()), config.TOP_N)}
-    removed = [cid for cid in prefloor if cid in flagged]
-    if not removed:
-        print("  borderline: none of the pre-floor top 100 are floored")
-        return
-    print(f"  borderline: {len(removed)} pre-floor top-100 candidate(s) floored, review:")
-    for cid in sorted(removed, key=lambda c: -raw[c]):
-        cand = mods[cid][0]
-        title = f"{cand.profile.current_title} at {cand.profile.current_company}"
-        companies = ", ".join(dict.fromkeys(r.company for r in cand.career_history if r.company))
-        print(f"    {cid} raw={raw[cid]:.4f} [{', '.join(flagged[cid])}] {title} | {companies}")
+def _report_cli(results, pool, excluded):
+    print("top 20:")
+    for row in results[:20]:
+        cand = pool.get(row["candidate_id"])
+        title = f"{cand.profile.current_title} at {cand.profile.current_company}" if cand else "?"
+        print(f"  {row['rank']:2d} {row['candidate_id']} score={row['score']:.4f} {title}")
 
 
-def print_top(top, mods, fac, imp):
-    print("top 20 (per-facet relevance: shipped, embeddings, product-ml):")
-    for rank, (cid, score) in enumerate(top[:20], 1):
-        cand = mods[cid][0]
-        fs = " ".join(f"{x:.2f}" for x in fac[cid])
-        title = f"{cand.profile.current_title} at {cand.profile.current_company}"
-        print(f"  {rank:2d} {cid} score={score:.4f} impact={imp[cid]:.2f} facets=[{fs}] {title}")
-
-
-def write_csv(path, top, reasons):
+def write_csv(path, results):
     with open(path, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["candidate_id", "rank", "score", "reasoning"])
-        for rank, (cid, score) in enumerate(top, 1):
-            w.writerow([cid, rank, repr(score), reasons[cid]])
+        for row in results:
+            w.writerow([row["candidate_id"], row["rank"], repr(row["score"]), row["reasoning"]])
 
 
 def validate(path):
