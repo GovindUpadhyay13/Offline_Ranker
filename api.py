@@ -23,6 +23,7 @@ import faiss
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
@@ -170,6 +171,12 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def serve_index():
+    """Serve the recruiter dashboard frontend."""
+    return FileResponse("index.html")
+
+
 class RankRequest(BaseModel):
     job_description: str
 
@@ -245,3 +252,8 @@ def rank(req: RankRequest):
         },
         "candidates": results,
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)
