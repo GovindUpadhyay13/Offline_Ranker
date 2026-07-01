@@ -5,7 +5,11 @@ modules = ["python-3.12", "web", "nix"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["glibcLocales", "libxcrypt"]
+packages = ["glibcLocales", "libxcrypt", "wget"]
 
 [agent]
 expertMode = true
+
+[[ports]]
+localPort = 5000
+externalPort = 80
