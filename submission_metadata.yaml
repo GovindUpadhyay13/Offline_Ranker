@@ -1,6 +1,6 @@
 # Redrob Hackathon — Submission Metadata
 
-team_name: "your-team-name-here"
+team_name: "parvbansal11"
 
 primary_contact:
   name: "Parv Bansal"
@@ -15,8 +15,8 @@ team_members:
 # ============================================================================
 # Code and reproducibility
 # ============================================================================
-github_repo: "https://github.com/YOUR_USERNAME/YOUR_REPO"
-sandbox_link: "https://huggingface.co/spaces/YOUR_USERNAME/redrob-ranker"
+github_repo: "https://github.com/parvbansal11/100csv"
+sandbox_link: "https://huggingface.co/spaces/parvbansal11/redrob-ranker"
 
 reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./submission.csv"
 # precompute.py must be run once first (network allowed) to vendor the models and

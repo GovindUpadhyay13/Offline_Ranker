@@ -13,7 +13,7 @@ def evidence_text(cand) -> str:
     Deliberately excludes the skills list so matching is driven by demonstrated work,
     not by keyword stuffing.
     """
-    parts = [cand.profile.summary]
+    parts = [cand.profile.headline, cand.profile.summary]
     parts += [f"{r.title}. {r.description}" for r in cand.career_history]
     return " ".join(p for p in parts if p).strip()
 
