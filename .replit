@@ -1,3 +1,29 @@
 entrypoint = "api.py"
 
 run = "python -m uvicorn api:app --host 0.0.0.0 --port $PORT"
+modules = ["python-3.12", "web", "nix"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["glibcLocales", "libxcrypt", "wget"]
+
+[agent]
+expertMode = true
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[workflows]
+
+[[workflows.workflow]]
+name = "Main"
+mode = "sequential"
+author = 61593607
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m uvicorn api:app --host 0.0.0.0 --port 5000"
+
+[deployment]
+deploymentTarget = "cloudrun"
