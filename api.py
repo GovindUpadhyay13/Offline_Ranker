@@ -23,6 +23,7 @@ import faiss
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
@@ -173,6 +174,12 @@ app.add_middleware(
 class RankRequest(BaseModel):
     job_description: str
 
+
+
+
+@app.get("/")
+def home():
+    return FileResponse("index.html")
 
 @app.get("/health")
 def health():
