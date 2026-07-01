@@ -5,3 +5,7 @@ modules = ["python-3.12", "web", "nix"]
 
 [nix]
 channel = "stable-25_05"
+packages = ["glibcLocales", "libxcrypt"]
+
+[agent]
+expertMode = true
