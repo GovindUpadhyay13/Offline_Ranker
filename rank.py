@@ -91,7 +91,7 @@ def rank_candidates(
         if cid in candidate_pool and cid not in excluded
     ]
     texts = [features.evidence_text(c) for c in cands]
-    active_facets = rerank.extract_facets(jd_text)
+    active_facets = rerank.extract_facets(jd_text, n=len(config.FACETS))
     print(f"facets: {active_facets}")
     facets = rerank.facet_scores(cross, active_facets, texts)
 
@@ -112,14 +112,15 @@ def rank_candidates(
         rec[cid] = recency
         fac[cid] = row
         rel = scoring.facet_relevance(row)
-        raw[cid] = scoring.combine(rel, avail, loc, recency, applied, chaser, imp[cid])
+        raw[cid] = scoring.combine(rel, avail, loc, recency, applied, chaser, imp[cid], c)
         fl = disqualifiers.flags(c)
         if fl:
             flagged[cid] = fl
         scored.append((cid, config.DISQUALIFIER_FLOOR if fl else raw[cid]))
 
     top = scoring.order_top(scored, config.TOP_N)
-    reasons, _ = reasoning.generate(config.REASONING_MODE, top, mods)
+    from src import reasoning_a
+    reasons, _ = reasoning_a.generate_variant_a(top, mods)
 
     return [
         {
@@ -233,8 +234,9 @@ def main():
 
     excluded = run_gate(feat, ids_all, violations, args.out)
 
+    # Variant A Run
     t = time.perf_counter()
-    results = rank_candidates(
+    results_a = rank_candidates(
         jd_text,
         embedder=embedder,
         cross=cross,
@@ -245,20 +247,19 @@ def main():
         excluded=excluded,
         stats=stats,
     )
-    print(f"rank: {len(results)} candidates scored, {time.perf_counter() - t:.1f}s")
+    print(f"rank Variant A: {len(results_a)} candidates scored, {time.perf_counter() - t:.1f}s")
+    _report_cli(results_a, pool, excluded)
+    # Write outputs to the path specified by --out
+    write_csv(args.out, results_a)
+    print(f"write: {len(results_a)} rows to {args.out}")
+    ok_a = validate(args.out)
 
-    # Print top-20 diagnostic (replicates old print_top + report_disqualifiers)
-    _report_cli(results, pool, excluded)
-
-    write_csv(args.out, results)
-    print(f"write: {len(results)} rows to {args.out}")
-
-    ok = validate(args.out)
     total = time.perf_counter() - start
-    print(f"{'PASS' if ok else 'FAIL'}: total {total:.1f}s")
+    print(f"Validation: {'PASS' if ok_a else 'FAIL'}")
+    print(f"Total time elapsed: {total:.1f}s")
     if total > config.RUNTIME_WARN_S:
         print(f"WARN: total runtime {total:.1f}s exceeds the {config.RUNTIME_WARN_S}s budget")
-    sys.exit(0 if ok else 1)
+    sys.exit(0 if ok_a else 1)
 
 
 def run_gate(feat, ids_all, violations, out_path):
@@ -275,8 +276,10 @@ def run_gate(feat, ids_all, violations, out_path):
             excluded[cid] = (title, company, soft, "soft+outlier")
     frac = len(excluded) / len(ids_all)
     n_hard = sum(1 for x in excluded.values() if x[3] == "hard")
+    n_founding = sum(1 for cid, (_, _, hard, _) in violations.items() if "predates_company_founding" in hard)
     print(f"integrity: {len(excluded)} excluded ({frac:.2%} of pool), "
-          f"{n_hard} hard contradictions, {len(excluded) - n_hard} corroborated soft, "
+          f"{n_hard} hard contradictions (incl. {n_founding} company founding violations), "
+          f"{len(excluded) - n_hard} corroborated soft, "
           f"{outlier.sum()} outliers, {time.perf_counter() - t:.1f}s")
     for cid, (title, company, v, kind) in list(excluded.items())[:15]:
         print(f"  excluded {cid} [{kind}]: {title} at {company} [{', '.join(v)}]")

@@ -20,6 +20,7 @@ EMB_NPY = "artifacts/embeddings.npy"  # persisted candidate evidence vectors
 FAISS_PATH = "artifacts/faiss.index"  # persisted dense index over the vectors
 BM25_PATH = "artifacts/bm25.pkl"  # persisted lexical index over the same text
 IDS_PATH = "artifacts/id_order.json"  # candidate_id order aligning rows to vectors
+FOUNDING_YEARS_PATH = "artifacts/company_founding_years.json"  # persisted company founding years lookup table
 OUTPUT_CSV = "submission.csv"  # final ranking, must pass validate_submission.py
 VALIDATOR = "validate_submission.py"  # run after writing to self-check the output
 
@@ -48,9 +49,10 @@ FACETS = (
     "Built and shipped an end to end ranking, search, or recommendation system to real users in production.",
     "Deep hands on experience with text embeddings, retrieval, and vector search at production scale.",
     "Applied machine learning at a product company building its own product, not an IT services or consulting firm and not a pure academic research lab.",
+    "Hands-on design and implementation of ranking, search, or recommendation evaluation frameworks, including metrics like NDCG, MRR, MAP, offline/online correlation, and A/B testing.",
 )
-FACET_WEIGHTS = (1.0, 1.0, 0.8)  # facets 1 and 2 are the decisive fit signals, 3 supporting
-RELEVANCE_TOP_FACETS = 3  # average all three discriminating facets
+FACET_WEIGHTS = (1.0, 1.0, 0.8, 0.9)  # facets 1 and 2 are primary, 4 (eval) is 0.9, 3 is 0.8
+RELEVANCE_TOP_FACETS = 4  # average all four discriminating facets
 
 # Hands-on recency (structural, not a cross-encoder facet): the JD rejects seniors
 # who stopped writing code for architecture or management. Reward a candidate

@@ -8,12 +8,20 @@ profile. The -1 sentinels in github_activity_score and offer_acceptance_rate are
 missing, never low, and are imputed before fitting.
 """
 
-from __future__ import annotations
-
+import json
+import os
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
 import config
+
+_FOUNDING_YEARS = {}
+if os.path.exists(config.FOUNDING_YEARS_PATH):
+    try:
+        with open(config.FOUNDING_YEARS_PATH, "r", encoding="utf-8") as f:
+            _FOUNDING_YEARS = json.load(f)
+    except Exception:
+        pass
 
 # Ordinal encoding of the company-size bands, the one categorical we use.
 _SIZE_ORD = {
@@ -125,6 +133,14 @@ def hard_contradictions(cand, bounds) -> list:
         if m and r.start == m[0] and m[1] is not None and _months(m[0], m[1]) > config.COMPANY_PREDATE_MONTHS:
             v.append("predates_company_cohort")
             break
+
+    # Honeypot check: check if candidate tenure implies start date earlier than founding year
+    for r in cand.career_history:
+        if r.company and r.start:
+            founding_year = _FOUNDING_YEARS.get(r.company)
+            if founding_year is not None and r.start.year < founding_year:
+                v.append("predates_company_founding")
+                break
 
     return v
 

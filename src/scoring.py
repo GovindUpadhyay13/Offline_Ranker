@@ -117,21 +117,46 @@ def applied_ml_signal(cand) -> float:
 
 
 def is_title_chaser(cand) -> bool:
-    """Average tenure per company below the cut across a genuine multi-company history.
-
-    Tenure is summed per company (so internal promotions do not read as hops),
-    and the pattern must repeat across several companies before it counts.
+    """Flag trajectories showing Senior->Staff->Principal-style title escalation
+    via company changes at ~1.5-year intervals.
     """
+    roles = sorted([r for r in cand.career_history if r.start], key=lambda r: r.start)
+    if len(roles) < 2:
+        return False
+    
+    escalations = 0
+    for i in range(len(roles) - 1):
+        r1 = roles[i]
+        r2 = roles[i+1]
+        
+        if r1.company != r2.company:
+            if r1.duration_months <= 24:
+                t1 = r1.title.lower()
+                t2 = r2.title.lower()
+                
+                lvl1 = 0
+                if "senior" in t1 or "sr" in t1:
+                    lvl1 = 1
+                if any(h in t1 for h in ["lead", "staff", "principal", "architect", "director", "vp"]):
+                    lvl1 = 2
+                    
+                lvl2 = 0
+                if "senior" in t2 or "sr" in t2:
+                    lvl2 = 1
+                if any(h in t2 for h in ["lead", "staff", "principal", "architect", "director", "vp"]):
+                    lvl2 = 2
+                    
+                if lvl2 > lvl1:
+                    escalations += 1
+                    
     by_company = {}
     for r in cand.career_history:
         by_company[r.company] = by_company.get(r.company, 0) + r.duration_months
-    if len(by_company) < config.TITLE_CHASER_MIN_COMPANIES:
-        return False
-    avg_years = sum(by_company.values()) / len(by_company) / 12.0
-    return avg_years < config.TITLE_CHASER_TENURE_YEARS
+    avg_years = sum(by_company.values()) / len(by_company) / 12.0 if by_company else 99
+    return escalations >= 1 and avg_years < 2.0
 
 
-def combine(relevance, avail, loc, recency, applied_ml, title_chaser, impact) -> float:
+def combine(relevance, avail, loc, recency, applied_ml, title_chaser, impact, cand) -> float:
     """Fold the small modifiers into the (already [0, 1]) relevance score.
 
     Availability, location, recency, and the title-chaser penalty scale with
@@ -140,12 +165,45 @@ def combine(relevance, avail, loc, recency, applied_ml, title_chaser, impact) ->
     """
     score = relevance * (
         1.0
-        + config.AVAILABILITY_WEIGHT * avail
-        + config.LOCATION_WEIGHT * loc
         + config.RECENCY_WEIGHT * recency
         - (config.TITLE_CHASER_PENALTY if title_chaser else 0.0)
-    )
-    return score + config.APPLIED_ML_WEIGHT * applied_ml + config.IMPACT_WEIGHT * impact
+    ) + config.APPLIED_ML_WEIGHT * applied_ml + config.IMPACT_WEIGHT * impact
+
+    # Location fit as a multiplicative factor
+    if loc == -1.0:
+        loc_mult = 0.05
+    elif loc == 0.0:
+        loc_mult = 0.6
+    elif loc == 0.5:
+        loc_mult = 0.85
+    else:
+        loc_mult = 1.0
+
+    # Notice period as a multiplicative factor
+    notice = cand.signals.notice_period_days
+    if notice is not None:
+        if notice > 60:
+            notice_mult = 0.7
+        elif notice > 30:
+            notice_mult = 0.9
+        else:
+            notice_mult = 1.0
+    else:
+        notice_mult = 1.0
+
+    # Recruiter responsiveness as a multiplicative factor
+    resp = cand.signals.recruiter_response_rate
+    if resp is not None:
+        if resp < 0.3:
+            resp_mult = 0.8
+        elif resp >= 0.8:
+            resp_mult = 1.05
+        else:
+            resp_mult = 1.0
+    else:
+        resp_mult = 1.0
+
+    return score * loc_mult * notice_mult * resp_mult
 
 
 def order_top(scored, n):
