@@ -14,19 +14,28 @@ Ranking uses no LLM for the decision and no model trained on labels. The runtime
 
 precompute.py runs once, offline, with network allowed. It vendors the models into models/, embeds every candidate, builds the FAISS and BM25 indexes, and persists them to artifacts/. rank.py runs at submission time with no network, no model downloads, and no API calls, loading those artifacts and finishing under five minutes on 16 GB of RAM. The split keeps every slow or networked step out of the timed path.
 
-## How to Run
+## How to run
 
-### 1. Pre-Computation (Run Once)
-The system requires a one-time pre-computation step to vendor models, build search indexes, and pre-embed the candidates. This step requires internet access (to download model weights) and **may exceed the 5-minute window**:
+The single command that produces the final submission CSV from the candidates file is:
+
 ```bash
-python3 precompute.py
+python rank.py --candidates ./candidates.jsonl --out ./submission.csv
 ```
 
-### 2. Single Command to Produce Submission CSV (Reproduction Command)
-Once pre-computation is done, run the following single command to perform ranking and produce the submission. This step runs completely offline, uses no external APIs, and **must complete under 5 minutes** (takes ~3.5 minutes on CPU):
-```bash
-python3 rank.py --candidates ./candidates.jsonl --out ./submission.csv
-```
+### Pre-computation Requirement
+This system uses a two-binary design to satisfy offline and runtime constraints:
+1. **Pre-computation (Offline, Network Allowed)**: Before running the ranker, you must run the pre-computation script once to download the local model files and build search indices over the candidate pool:
+   ```bash
+   python precompute.py
+   ```
+   *Note: This pre-computation phase runs once and may exceed the 5-minute window (typically taking ~6-7 minutes on CPU to embed all 100,000 candidates).*
+
+2. **Submission Generation (Offline, Timed)**: The single command shown above (`python rank.py ...`) loads these pre-computed local artifacts, runs entirely offline, and executes the full candidate ranking pipeline in **under 4 minutes** (typically ~3.7 minutes on CPU), well within the 5-minute evaluation window.
+
+3. **Validation (Self-check)**:
+   ```bash
+   python validate_submission.py submission.csv
+   ```
 
 ## Repository structure
 

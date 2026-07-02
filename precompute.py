@@ -41,21 +41,13 @@ def main():
     print(f"models: vendored to {config.MODELS_DIR}, {time.perf_counter() - t:.1f}s")
 
     t = time.perf_counter()
-    pool = embedder.start_multi_process_pool()
-    try:
-        emb = embedder.encode(
-            texts,
-            pool=pool,
-            batch_size=config.EMBED_BATCH
-        )
-    finally:
-        embedder.stop_multi_process_pool(pool)
-
-    # Normalize embeddings manually and downcast to float16
-    norms = np.linalg.norm(emb, axis=1, keepdims=True)
-    norms[norms == 0] = 1e-12
-    emb = (emb / norms).astype(np.float16)
-
+    emb = embedder.encode(
+        texts,
+        batch_size=config.EMBED_BATCH,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=True,
+    ).astype(np.float32)
     np.save(config.EMB_NPY, emb)
     print(f"embed: {emb.shape}, {time.perf_counter() - t:.1f}s")
 
