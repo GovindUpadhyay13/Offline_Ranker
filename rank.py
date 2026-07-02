@@ -119,8 +119,7 @@ def rank_candidates(
         scored.append((cid, config.DISQUALIFIER_FLOOR if fl else raw[cid]))
 
     top = scoring.order_top(scored, config.TOP_N)
-    from src import reasoning_a
-    reasons, _ = reasoning_a.generate_variant_a(top, mods)
+    reasons, _ = reasoning.generate(config.REASONING_MODE, top, mods)
 
     return [
         {

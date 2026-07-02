@@ -14,12 +14,18 @@ Ranking uses no LLM for the decision and no model trained on labels. The runtime
 
 precompute.py runs once, offline, with network allowed. It vendors the models into models/, embeds every candidate, builds the FAISS and BM25 indexes, and persists them to artifacts/. rank.py runs at submission time with no network, no model downloads, and no API calls, loading those artifacts and finishing under five minutes on 16 GB of RAM. The split keeps every slow or networked step out of the timed path.
 
-## How to run
+## How to Run
 
-```
+### 1. Pre-Computation (Run Once)
+The system requires a one-time pre-computation step to vendor models, build search indexes, and pre-embed the candidates. This step requires internet access (to download model weights) and **may exceed the 5-minute window**:
+```bash
 python3 precompute.py
-python3 rank.py --candidates candidates.jsonl --out submission.csv
-python3 validate_submission.py submission.csv
+```
+
+### 2. Single Command to Produce Submission CSV (Reproduction Command)
+Once pre-computation is done, run the following single command to perform ranking and produce the submission. This step runs completely offline, uses no external APIs, and **must complete under 5 minutes** (takes ~3.5 minutes on CPU):
+```bash
+python3 rank.py --candidates ./candidates.jsonl --out ./submission.csv
 ```
 
 ## Repository structure

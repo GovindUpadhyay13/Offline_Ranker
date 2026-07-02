@@ -23,8 +23,9 @@ def tokenize(text) -> list:
 
 def build_dense_index(embeddings, path):
     """Build a cosine (inner-product on normalized vectors) FAISS index and persist it."""
-    index = faiss.IndexFlatIP(embeddings.shape[1])
-    index.add(embeddings)
+    embeddings_f32 = embeddings.astype(np.float32)
+    index = faiss.IndexFlatIP(embeddings_f32.shape[1])
+    index.add(embeddings_f32)
     faiss.write_index(index, path)
     return index
 
