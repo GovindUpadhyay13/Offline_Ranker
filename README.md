@@ -12,7 +12,7 @@ Ranking uses no LLM for the decision and no model trained on labels. The runtime
 
 ## Architechture
 
-![System Architecture](./Architecture.png)
+!(./Architecture.png)
 
 ## Two-binary design
 
