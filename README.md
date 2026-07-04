@@ -10,6 +10,10 @@ On top of relevance, an integrity gate removes fabricated profiles. It fits an I
 
 Ranking uses no LLM for the decision and no model trained on labels. The runtime constraints rule out network and heavy compute, and the dataset ships no labels, so a learned-label model would only relearn whatever heuristic generated the labels.
 
+## Architechture
+
+(Architechture.png)
+
 ## Two-binary design
 
 precompute.py runs once, offline, with network allowed. It vendors the models into models/, embeds every candidate, builds the FAISS and BM25 indexes, and persists them to artifacts/. rank.py runs at submission time with no network, no model downloads, and no API calls, loading those artifacts and finishing under five minutes on 16 GB of RAM. The split keeps every slow or networked step out of the timed path.
