@@ -1,4 +1,4 @@
-# Candidate ranking for a Senior AI Engineer role
+# THIS IS A REPO FOR RANKING SYSTEM DESIGNED FOR REDROB (INDIA RUNS HACKATHON)
 
 This system ranks the top 100 candidates from a pool of 100,000 against a Senior AI Engineer job description. It runs offline on CPU, finishes the ranking pass in under five minutes, and writes a CSV with a score and a one-line justification per candidate. Matching is driven by the semantic relevance of each candidate's career evidence to the job description, not by their self-reported skills list.
 
